@@ -1,0 +1,11 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+        "AzureWebJobsStorage": "",
+        "FUNCTIONS_WORKER_RUNTIME": "python",
+        "SHOPIFY_STORE_URL": "",
+        "SHOPIFY_ACCESS_TOKEN": "",
+        "TARGET_COLLECTION_ID": "",
+        "ORDER_DELAY_DAYS": "180"
+    }
+}
