@@ -56,29 +56,14 @@ class ShopifyHelper:
         
         print(f"DEBUG: Recherche des commandes entre {date_start} et {date_end}")
         
-        # On peut avoir beaucoup de commandes sur une plage large, Shopify limite à 250 par page
-        orders = []
-        page_info = None
-        
-        while True:
-            params = {
-                'created_at_min': f"{date_start}T00:00:00Z",
-                'created_at_max': f"{date_end}T23:59:59Z",
-                'status': 'any',
-                'limit': 250
-            }
-            if page_info:
-                params['page_info'] = page_info
-                # Quand on utilise page_info, on ne doit pas envoyer les autres filtres temporels
-                del params['created_at_min']
-                del params['created_at_max']
-            
-            current_page = shopify.Order.find(**params)
-            orders.extend(current_page)
-            
-            page_info = current_page.next_page_url
-            if not page_info:
-                break
+        # Récupérer TOUTES les commandes dans la plage sans pagination
+        # (la pagination avec page_info ne peut pas être mixée avec les filtres temporels)
+        orders = shopify.Order.find(
+            created_at_min=f"{date_start}T00:00:00Z",
+            created_at_max=f"{date_end}T23:59:59Z",
+            status='any',
+            limit=250
+        )
 
         # On extrait les clients uniques qui ont acheté dans la collection cible si spécifiée
         customers = {}

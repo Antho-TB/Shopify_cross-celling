@@ -38,7 +38,7 @@ def get_all_collections():
     session = shopify.Session(store_url, '2025-01', access_token)
     shopify.ShopifyResource.activate_session(session)
 
-    print(f"🔍 Récupération de toutes les collections depuis {store_url}...\n")
+    print(f"Recuperation de toutes les collections depuis {store_url}...\n")
 
     try:
         # Récupérer toutes les collections via GraphQL
@@ -117,14 +117,14 @@ def get_all_collections():
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("\n".join(output_lines))
 
-        print(f"✓ {len(collections)} collection(s) trouvée(s)!\n")
+        print(f"✓ {len(collections)} collection(s) trouvee(s)!\n")
         print("Détails:")
         print("-" * 80)
         for i, collection in enumerate(collections, 1):
             collection_id = collection.get('id', '').split("/")[-1]
             print(f"{i:2}. [{collection_id:>12}] {collection.get('title', 'N/A'):<40} ({collection.get('handle')})")
         
-        print(f"\n✓ Fichier généré: {filename}")
+        print(f"✓ Fichier genere: {filename}")
 
     except Exception as e:
         print(f"✗ Erreur lors de la récupération des collections: {e}")
