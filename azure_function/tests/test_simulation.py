@@ -1,4 +1,8 @@
-from shopify_helper import ShopifyHelper
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.shopify_helper import ShopifyHelper
 import os
 from dotenv import load_dotenv
 

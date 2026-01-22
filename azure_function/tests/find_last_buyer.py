@@ -1,7 +1,11 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import shopify
 import os
 from dotenv import load_dotenv
-from shopify_helper import ShopifyHelper
+from core.shopify_helper import ShopifyHelper
 
 load_dotenv()
 
