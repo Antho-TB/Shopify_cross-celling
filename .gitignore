@@ -4,9 +4,10 @@ __pycache__/
 *$py.class
 venv/
 .env
+token.txt
 
 # IDEs
-.vscode/
+
 .idea/
 Thumbs.db
 
