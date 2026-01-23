@@ -75,22 +75,29 @@ class ShopifyHelper:
         if collection_id:
             logger.info(f"  Filtre collection: {collection_id}")
         
-        # Récupérer TOUTES les commandes dans la plage sans pagination
-        # (la pagination avec page_info ne peut pas être mixée avec les filtres temporels)
+        # Récupérer les commandes avec pagination
         orders = shopify.Order.find(
             created_at_min=f"{date_start}T00:00:00Z",
             created_at_max=f"{date_end}T23:59:59Z",
             status='any',
             limit=250
         )
+        
+        all_orders = []
+        all_orders.extend(orders)
+        
+        while orders.has_next_page():
+            orders = orders.next_page()
+            all_orders.extend(orders)
+            logger.info(f"Page suivante: {len(all_orders)} commandes récupérées au total")
 
         # On extrait les clients uniques qui ont acheté dans la collection cible si spécifiée
         customers = {}
         target_product_ids = self.get_collection_products(collection_id) if collection_id else None
         
-        logger.info(f"Traitement de {len(orders)} commandes")
+        logger.info(f"Traitement de {len(all_orders)} commandes au total")
         
-        for o in orders:
+        for o in all_orders:
             if not o.customer or o.customer.id in customers:
                 continue
                 
@@ -102,7 +109,7 @@ class ShopifyHelper:
             
             customers[o.customer.id] = o.customer
         
-        logger.info(f"Trouvé: {len(customers)} clients uniques")
+        logger.info(f"Trouvé: {len(customers)} clients uniques éligibles")
         return list(customers.values())
 
     def update_customer_recommendations(self, customer_id, product_ids):
