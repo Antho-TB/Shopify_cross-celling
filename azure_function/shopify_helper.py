@@ -198,84 +198,57 @@ class ShopifyHelper:
             logger.error(f"Client {customer_id} non trouvé")
             return False
 
-        # 1. Version texte simple (pour compatibilité)
-        reco_names = manual_names if manual_names else self.get_product_names(product_ids[:3])
-        recommendation_str = " • " + " • ".join(reco_names)
-        
-        # 2. Version JSON Riche (pour les images et prix dans Liquid)
-        import json
-        reco_json_data = []
+        # 1. Version texte Riche (Noms + Prix) - LE PLUS STABLE
+        reco_items = manual_data if manual_data else [manual_names[i] for i in range(len(product_ids[:3]))]
+        # Si on n'a pas manual_data, on essaye de construire une chaîne propre
         if manual_data:
-            reco_json_data = manual_data
+            reco_names_with_prices = [f"{item['title']} ({item['price']} €)" for item in manual_data]
         else:
-            # Si pas de data riche, on cherche les infos minimales
-            for i, pid in enumerate(product_ids[:3]):
-                reco_json_data.append({
-                    "title": reco_names[i] if i < len(reco_names) else "Produit",
-                    "image_url": "", 
-                    "price": "0.00",
-                    "id": pid
-                })
-
-        logger.info(f"Injection recommandation pour {customer_id}")
+            reco_names_with_prices = manual_names if manual_names else self.get_product_names(product_ids[:3])
+            
+        recommendation_str = " • " + " • ".join(reco_names_with_prices)
         
-        # Injection Metafield Texte
-        meta_text = shopify.Metafield({
-            'namespace': 'cross_sell',
-            'key': 'next_recommendations',
-            'value': recommendation_str,
-            'type': 'single_line_text_field'
-        })
-        customer.add_metafield(meta_text)
+        # 2. Version JSON (Pour le futur)
+        new_metafields = [
+            shopify.Metafield({
+                'namespace': 'cross_sell',
+                'key': 'next_recommendations',
+                'value': recommendation_str,
+                'type': 'single_line_text_field'
+            }),
+            shopify.Metafield({
+                'namespace': 'cross_sell',
+                'key': 'reco_data',
+                'value': json.dumps(reco_json_data, ensure_ascii=False),
+                'type': 'json'
+            })
+        ]
 
-        # Injection Metafield JSON (Images + Prix)
-        meta_json = shopify.Metafield({
-            'namespace': 'cross_sell',
-            'key': 'reco_data',
-            'value': json.dumps(reco_json_data),
-            'type': 'json'
-        })
-        customer.add_metafield(meta_json)
-
-        # Injection Metafield Lien Collection (Nouveau !)
         if collection_url:
-            meta_link = shopify.Metafield({
+            new_metafields.append(shopify.Metafield({
                 'namespace': 'cross_sell',
                 'key': 'collection_url',
                 'value': collection_url,
                 'type': 'single_line_text_field'
-            })
-            customer.add_metafield(meta_link)
-        
-        # Ajout du Tag pour Shopify Flow
-        # HACK: Pour forcer Shopify Flow à se déclencher sur l'ajout d'un tag, 
-        # il faut parfois le supprimer et le rajouter dans deux enregistrements distincts
-        # si le tag était déjà présent.
-        current_tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
+            }))
 
+        # 3. Gestion du Trigger (Double save pour s'assurer que le tag est "nouveau")
+        current_tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
+        
         if 'trigger_reco' in current_tags:
-            logger.info("Tag 'trigger_reco' déjà présent. Suppression temporaire pour forcer le déclenchement...")
             current_tags.remove('trigger_reco')
             customer.tags = ", ".join(current_tags)
             customer.save()
-            # On recharge l'objet pour être sûr de l'état des metafields
             customer = shopify.Customer.find(customer_id)
-            # Les metafields doivent être ré-attachés après un find() car ils ne sont pas chargés par défaut
-            customer.add_metafield(meta_text)
-            customer.add_metafield(meta_json)
-            if collection_url:
-                customer.add_metafield(meta_link)
-
-        # On rajoute le tag (ceci déclenchera le Flow "Tag Added" ou "Customer Updated")
+        
+        # On rajoute le tag
         tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
         if 'trigger_reco' not in tags:
             tags.append('trigger_reco')
         customer.tags = ", ".join(tags)
         
-        success = customer.save()
-        if success:
-            logger.info(f"Succès: Metafields et Tag injectés pour {customer_id}")
-            return True
-        else:
-            logger.error(f"Erreur Shopify: {customer.errors.full_messages()}")
-            return False
+        # Injection finale des metafields
+        for meta in new_metafields:
+            customer.add_metafield(meta)
+        
+        return customer.save()
