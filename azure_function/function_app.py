@@ -13,152 +13,107 @@ app = func.FunctionApp()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-@app.schedule(schedule="0 0 2 * * 1", arg_name="myTimer", run_on_startup=False,
-              use_monitor=False) 
-def weekly_cross_sell_scanner(myTimer: func.TimerRequest) -> None:
-    """
-    Scan hebdomadaire (2h du matin, chaque lundi) pour identifier les clients 
-    ayant acheté un produit il y a 6 mois jour pour jour ±7 jours
-    et injecter les recommandations pour TOUTES les collections.
-    
-    Fenêtre: 173-180 jours (6 mois - 7 jours à 6 mois pile)
-    Fréquence: 1x par semaine (lundi à 2h)
-    Mode: PRODUCTION (toutes les collections)
-    """
-    logger.info('=== Démarrage du scanner hebdomadaire (6 mois ±7 jours) - TOUTES COLLECTIONS ===')
+@app.schedule(schedule="0 0 2 * * 1", arg_name="myTimer", run_on_startup=False, use_monitor=False) 
+def weekly_cross_sell_scanner_timer(myTimer: func.TimerRequest) -> None:
+    """Déclencheur temporel par défaut (Lundi 2h)."""
+    run_global_scan()
+
+@app.route(route="run_global_scan", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+def http_run_global_scan(req: func.HttpRequest) -> func.HttpResponse:
+    """Permet à Shopify Flow de déclencher le scan manuellement ou sur programme."""
+    try:
+        results = run_global_scan()
+        return func.HttpResponse(json.dumps({"success": True, "details": results}), mimetype="application/json")
+    except Exception as e:
+        return func.HttpResponse(json.dumps({"success": False, "error": str(e)}), status_code=500)
+
+def run_global_scan():
+    """Cœur de la logique de scan (Mutualisé)."""
+    logger.info('=== Démarrage du scan global (Production) ===')
     
     report = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "type": "weekly_scan",
-        "status": "started",
-        "collections": [],
+        "timestamp": datetime.now().isoformat(),
+        "type": "SCAN",
+        "status": "in_progress",
         "total_updated": 0,
-        "errors": []
+        "errors": [],
+        "raw_logs": ""
     }
-    report_manager = ReportManager()
-
-    # Capture des logs en mémoire
+    
+    # Capture des logs pour le dashboard
     log_stream = io.StringIO()
     log_handler = logging.StreamHandler(log_stream)
-    log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(log_handler)
-
+    
     try:
-        # Configuration
         store_url = os.environ.get("SHOPIFY_STORE_URL")
         access_token = os.environ.get("SHOPIFY_ACCESS_TOKEN")
-        client_id = os.environ.get("SHOPIFY_CLIENT_ID")
-        client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET")
-        # Fenêtre 6 mois ±7 jours: 173-180 jours
+        
+        # Fenêtre de 6 mois (173-180 jours)
         delay_start = int(os.environ.get("ORDER_DELAY_DAYS_START", 173))
         delay_end = int(os.environ.get("ORDER_DELAY_DAYS_END", 180))
 
-        if not all([store_url]) or not (access_token or (client_id and client_secret)):
-            logger.error("Variables d'environnement manquantes (SHOPIFY_STORE_URL + token requis).")
-            return
+        helper = ShopifyHelper(store_url, access_token=access_token)
+        report_manager = ReportManager()
 
-        logger.info(f"Configuration: Fenêtre={delay_start}-{delay_end} jours (6 mois ±7j)")
-
-        # Initialisation du helper
-        helper = ShopifyHelper(store_url, access_token=access_token, client_id=client_id, client_secret=client_secret)
-
-        # 1. Récupérer TOUTES les collections
-        logger.info("Récupération de toutes les collections...")
-        all_collections = {
-            '298781474968': 'Forgés',
-            '299133665432': 'Louis',
-            '299133730968': 'Brigade forgé premium®',
-            '303575662744': 'Forgé Premium Evercut®'
+        # Liste des collections à scanner
+        collections = {
+            "299133665432": "Louis",
+            "298781474968": "Forgés",
+            "299133730968": "Brigade",
+            "303575662744": "Forgé Premium Evercut"
         }
-        
-        logger.info(f"Collections à scanner: {len(all_collections)}")
-        
+
         total_customers_updated = 0
         
-        # 2. Pour CHAQUE collection
-        for collection_id, collection_name in all_collections.items():
-            logger.info(f"\n--- Traitement collection: {collection_name} ({collection_id}) ---")
+        for coll_id, coll_name in collections.items():
+            logger.info(f"Scanning collection: {coll_name}")
             
-            try:
-                # Récupérer les produits de la collection
-                collection_product_ids = helper.get_collection_products(collection_id)
-                logger.info(f"Produits: {len(collection_product_ids)}")
-                
-                if not collection_product_ids:
-                    logger.warning(f"Aucun produit trouvé dans {collection_name}")
-                    continue
-                
-                # Calculer l'URL de la collection une seule fois pour cette boucle
-                collection_url = helper.get_collection_url(collection_id)
-                logger.info(f"URL de la collection: {collection_url}")
-                
-                # Trouver les clients ayant commandé dans la plage cible
-                eligible_entries = helper.get_eligible_customers(
-                    days_start=delay_start, 
-                    days_end=delay_end, 
-                    collection_id=collection_id
-                )
-                logger.info(f"Clients éligibles: {len(eligible_entries)}")
-                
-                # Pour chaque client, calculer et injecter les recommandations
-                collection_updated_count = 0
-                for entry in eligible_entries:
-                    customer = entry["customer"]
-                    try:
-                        history = helper.get_customer_purchase_history(customer.id)
-                        
-                        # Produits non encore achetés
-                        remaining_products = list(collection_product_ids.keys())
-                        remaining_products = [pid for pid in remaining_products if pid not in history]
-                        
-                        if remaining_products:
-                            top_recos = remaining_products[:3]
-                            
-                            # Préparation des data riches (images, prix, etc.)
-                            reco_data = [collection_product_ids[pid] for pid in top_recos]
-                            reco_names = [d["title"] for d in reco_data]
-                            
-                            # Injection dans Shopify (Metafields + Tag)
-                            if helper.update_customer_recommendations(customer.id, top_recos, manual_names=reco_names, manual_data=reco_data, collection_url=collection_url):
-                                collection_updated_count += 1
-                                logger.debug(f"✓ {customer.email}: {len(top_recos)} recommandations")
-                        else:
-                            logger.debug(f"- {customer.email}: aucune recommandation (tous les produits achetés)")
-                            
-                    except Exception as e:
-                        logger.error(f"Erreur pour client {customer.id}: {str(e)}")
-                        continue
-                
-                logger.info(f"Collection {collection_name}: {collection_updated_count}/{len(customers)} clients mis à jour")
-                total_customers_updated += collection_updated_count
-                
-            except Exception as e:
-                logger.error(f"Erreur lors du traitement de {collection_name}: {str(e)}")
-                continue
+            coll_products = helper.get_collection_products(coll_id)
+            if not coll_products: continue
+            
+            eligible = helper.get_eligible_customers(days_start=delay_start, days_end=delay_end, collection_id=coll_id)
+            coll_updated_count = 0
 
-        logger.info(f"=== Scan hebdomadaire terminé: {total_customers_updated} clients mis à jour au total ===")
+            for entry in eligible:
+                customer = entry["customer"]
+                try:
+                    history = helper.get_customer_purchase_history(customer.id)
+                    p_ids = list(coll_products.keys())
+                    recos = [pid for pid in p_ids if pid not in history][:3]
+                    
+                    if recos:
+                        reco_data = [coll_products[pid] for pid in recos]
+                        reco_names = [d["title"] for d in reco_data]
+                        coll_url = helper.get_collection_url(coll_id)
+                        
+                        if helper.update_customer_recommendations(customer.id, recos, manual_names=reco_names, manual_data=reco_data, collection_url=coll_url):
+                            coll_updated_count += 1
+                except Exception as e:
+                    logger.error(f"Erreur client {customer.id}: {str(e)}")
+            
+            total_customers_updated += coll_updated_count
+            logger.info(f"Collection {coll_name}: {coll_updated_count} clients mis à jour")
         
         report["status"] = "success"
         report["total_updated"] = total_customers_updated
         
-        # Récupération des logs capturés
         log_handler.flush()
         report["raw_logs"] = log_stream.getvalue()
         logger.removeHandler(log_handler)
-        
         report_manager.save_report(report)
+        
+        return {"updated": total_customers_updated}
 
     except Exception as e:
-        logger.error(f"Erreur générale dans weekly_cross_sell_scanner: {str(e)}")
+        logger.error(f"Erreur fatale: {str(e)}")
         report["status"] = "error"
         report["errors"].append(str(e))
-        
-        # Récupération des logs même en cas d'erreur
         log_handler.flush()
         report["raw_logs"] = log_stream.getvalue()
         logger.removeHandler(log_handler)
-        
         report_manager.save_report(report)
+        raise e
 
 
 @app.route(route="dry_run", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
