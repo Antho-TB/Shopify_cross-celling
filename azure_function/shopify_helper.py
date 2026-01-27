@@ -248,17 +248,25 @@ class ShopifyHelper:
             customer.add_metafield(meta_link)
         
         # Ajout du Tag pour Shopify Flow
+        # HACK: Pour forcer Shopify Flow à se déclencher sur l'ajout d'un tag, 
+        # il faut parfois le supprimer et le rajouter dans deux enregistrements distincts
+        # si le tag était déjà présent.
         current_tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
 
         if 'trigger_reco' in current_tags:
+            logger.info("Tag 'trigger_reco' déjà présent. Suppression temporaire pour forcer le déclenchement...")
             current_tags.remove('trigger_reco')
             customer.tags = ", ".join(current_tags)
             customer.save()
+            # On recharge l'objet pour être sûr de l'état des metafields
             customer = shopify.Customer.find(customer_id)
+            # Les metafields doivent être ré-attachés après un find() car ils ne sont pas chargés par défaut
             customer.add_metafield(meta_text)
             customer.add_metafield(meta_json)
-            if collection_url: customer.add_metafield(meta_link)
+            if collection_url:
+                customer.add_metafield(meta_link)
 
+        # On rajoute le tag (ceci déclenchera le Flow "Tag Added" ou "Customer Updated")
         tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
         if 'trigger_reco' not in tags:
             tags.append('trigger_reco')
@@ -266,7 +274,7 @@ class ShopifyHelper:
         
         success = customer.save()
         if success:
-            logger.info(f"Succès: Metafields (texte + JSON + Lien) mis à jour pour {customer_id}")
+            logger.info(f"Succès: Metafields et Tag injectés pour {customer_id}")
             return True
         else:
             logger.error(f"Erreur Shopify: {customer.errors.full_messages()}")
