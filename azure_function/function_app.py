@@ -66,20 +66,27 @@ def run_global_scan():
 
         total_customers_updated = 0
         
+        # 2. Itération sur chaque collection cible
         for coll_id, coll_name in collections.items():
             logger.info(f"Scanning collection: {coll_name}")
             
+            # Récupération de tous les produits de cette collection
             coll_products = helper.get_collection_products(coll_id)
             if not coll_products: continue
             
+            # Recherche des clients ayant acheté dans cette collection il y a ~6 mois
             eligible = helper.get_eligible_customers(days_start=delay_start, days_end=delay_end, collection_id=coll_id)
             coll_updated_count = 0
 
+            # 3. Traitement de chaque client éligible trouvé
             for entry in eligible:
                 customer = entry["customer"]
                 try:
+                    # On compare ce qu'il a déjà acheté avec le contenu de la collection
                     history = helper.get_customer_purchase_history(customer.id)
                     p_ids = list(coll_products.keys())
+                    
+                    # Les recommandations sont les produits de la collection qu'il n'a PAS encore acheté
                     recos = [pid for pid in p_ids if pid not in history][:3]
                     
                     if recos:
@@ -87,6 +94,7 @@ def run_global_scan():
                         reco_names = [d["title"] for d in reco_data]
                         coll_url = helper.get_collection_url(coll_id)
                         
+                        # 4. Mise à jour Shopify : Injection des Metafields et du Tag déclencheur
                         if helper.update_customer_recommendations(
                             customer.id, 
                             recos, 
