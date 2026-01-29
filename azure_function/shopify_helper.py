@@ -193,14 +193,16 @@ class ShopifyHelper:
     def update_customer_recommendations(self, customer_id, product_ids, manual_names=None, manual_data=None, collection_url=None, last_product_name=None, last_collection_name=None):
         """Met à jour les metafields (JSON + Texte + Link) et ajoute le tag de déclenchement."""
         logger.info(f"Mise à jour recommandations pour client {customer_id}")
+        
+        # 0. Récupération de l'objet client Shopify
         customer = shopify.Customer.find(customer_id)
         if not customer:
             logger.error(f"Client {customer_id} non trouvé")
             return False
 
-        # 1. Version texte Riche (Noms + Prix) - LE PLUS STABLE
+        # 1. Préparation de la version texte riche (ex: "Produit A (15.00 €) • Produit B...")
+        # Cette chaîne compacte est destinée à être affichée directement dans l'email
         reco_items = manual_data if manual_data else [manual_names[i] for i in range(len(product_ids[:3]))]
-        # Si on n'a pas manual_data, on essaye de construire une chaîne propre
         if manual_data:
             reco_names_with_prices = [f"{item['title']} ({item['price']} €)" for item in manual_data]
         else:
@@ -208,14 +210,16 @@ class ShopifyHelper:
             
         recommendation_str = " • " + " • ".join(reco_names_with_prices)
         
-        # 2. Version JSON (Pour le futur)
+        # 2. Création de la liste des Metafields (namespace 'cross_sell')
         new_metafields = [
+            # next_recommendations: La chaîne de texte formatée pour l'affichage email
             shopify.Metafield({
                 'namespace': 'cross_sell',
                 'key': 'next_recommendations',
                 'value': recommendation_str,
                 'type': 'single_line_text_field'
             }),
+            # reco_data: Les données JSON brutes pour des intégrations plus complexes
             shopify.Metafield({
                 'namespace': 'cross_sell',
                 'key': 'reco_data',
@@ -224,7 +228,8 @@ class ShopifyHelper:
             })
         ]
 
-        # 3. Variables pour la communication (Nom produit et collection achetés)
+        # 3. Ajout des variables personnalisées pour le service communication
+        # Ces champs permettent d'écrire : "Vous avez acheté le [Nom du Produit]" dans l'email
         if last_product_name:
             new_metafields.append(shopify.Metafield({
                 'namespace': 'cross_sell',
@@ -241,6 +246,7 @@ class ShopifyHelper:
                 'type': 'single_line_text_field'
             }))
 
+        # 4. Ajout de l'URL de la collection pour le bouton d'appel à l'action
         if collection_url:
             new_metafields.append(shopify.Metafield({
                 'namespace': 'cross_sell',
@@ -249,23 +255,26 @@ class ShopifyHelper:
                 'type': 'single_line_text_field'
             }))
 
-        # 3. Gestion du Trigger (Double save pour s'assurer que le tag est "nouveau")
+        # 5. Gestion du Tag Trigger ('trigger_reco')
+        # On utilise une technique de "double save" : on retire le tag puis on le remet.
+        # Cela garantit que Shopify détecte un changement et lance le Flow correspondant.
         current_tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
         
         if 'trigger_reco' in current_tags:
             current_tags.remove('trigger_reco')
             customer.tags = ", ".join(current_tags)
-            customer.save()
+            customer.save() # Première sauvegarde sans le tag
             customer = shopify.Customer.find(customer_id)
         
-        # On rajoute le tag
+        # Ré-ajout du tag pour déclencher le Flow
         tags = [t.strip() for t in customer.tags.split(',')] if customer.tags else []
         if 'trigger_reco' not in tags:
             tags.append('trigger_reco')
         customer.tags = ", ".join(tags)
         
-        # Injection finale des metafields
+        # 6. Injection des Metafields préparés précédemment
         for meta in new_metafields:
             customer.add_metafield(meta)
         
+        # Sauvegarde finale regroupant les Metafields et le nouveau Tag
         return customer.save()
