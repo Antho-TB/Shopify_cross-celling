@@ -87,7 +87,15 @@ def run_global_scan():
                         reco_names = [d["title"] for d in reco_data]
                         coll_url = helper.get_collection_url(coll_id)
                         
-                        if helper.update_customer_recommendations(customer.id, recos, manual_names=reco_names, manual_data=reco_data, collection_url=coll_url):
+                        if helper.update_customer_recommendations(
+                            customer.id, 
+                            recos, 
+                            manual_names=reco_names, 
+                            manual_data=reco_data, 
+                            collection_url=coll_url,
+                            last_product_name=entry["purchased_product"],
+                            last_collection_name=coll_name
+                        ):
                             coll_updated_count += 1
                 except Exception as e:
                     logger.error(f"Erreur client {customer.id}: {str(e)}")
@@ -243,7 +251,15 @@ def http_trigger_test(req: func.HttpRequest) -> func.HttpResponse:
         collection_url = helper.get_collection_url(collection_id)
         logger.info(f"Déclenchement test avec: {reco_names} | Collection URL: {collection_url}")
         
-        if helper.update_customer_recommendations(customer.id, recommendations, manual_names=reco_names, manual_data=reco_data, collection_url=collection_url):
+        if helper.update_customer_recommendations(
+            customer.id, 
+            recommendations, 
+            manual_names=reco_names, 
+            manual_data=reco_data, 
+            collection_url=collection_url,
+            last_product_name="Couteau Test", # Valeur fixe pour le test
+            last_collection_name="Collection Test"
+        ):
             return func.HttpResponse(json.dumps({
                 "success": True, 
                 "customer_id": customer.id,
@@ -325,7 +341,15 @@ def http_validation_scan(req: func.HttpRequest) -> func.HttpResponse:
                     
                     # On redirige la recommandation vers le client TEST
                     logger.info(f"Redirection ({count+1}/{limit_total}): Simulation pour {real_customer.email} envoyée à {test_email} (Collection: {collection_name})")
-                    if helper.update_customer_recommendations(test_customer.id, recommendations, manual_names=reco_names, manual_data=reco_data, collection_url=collection_url):
+                    if helper.update_customer_recommendations(
+                        test_customer.id, 
+                        recommendations, 
+                        manual_names=reco_names, 
+                        manual_data=reco_data, 
+                        collection_url=collection_url,
+                        last_product_name=entry["purchased_product"],
+                        last_collection_name=collection_name
+                    ):
                         count += 1
                         processed.append({"simulated_for": real_customer.email, "collection": collection_name, "recos": reco_names})
                         
@@ -416,7 +440,13 @@ def http_check_recommendations(req: func.HttpRequest) -> func.HttpResponse:
         if force_update and recommendations:
             collection_url = helper.get_collection_url(collection_id)
             logger.info(f"Force Update activé pour le client {customer_id}")
-            if helper.update_customer_recommendations(customer_id, recommendations, collection_url=collection_url):
+            if helper.update_customer_recommendations(
+                customer_id, 
+                recommendations, 
+                collection_url=collection_url,
+                last_product_name="Produit Simulation", # Mode manuel
+                last_collection_name="Collection Simulation"
+            ):
                 update_status = "Success (Metafield + Tag injectés)"
             else:
                 update_status = "Failed"

@@ -190,7 +190,7 @@ class ShopifyHelper:
         logger.info(f"Trouvé: {len(eligible_entries)} clients uniques éligibles")
         return eligible_entries
 
-    def update_customer_recommendations(self, customer_id, product_ids, manual_names=None, manual_data=None, collection_url=None):
+    def update_customer_recommendations(self, customer_id, product_ids, manual_names=None, manual_data=None, collection_url=None, last_product_name=None, last_collection_name=None):
         """Met à jour les metafields (JSON + Texte + Link) et ajoute le tag de déclenchement."""
         logger.info(f"Mise à jour recommandations pour client {customer_id}")
         customer = shopify.Customer.find(customer_id)
@@ -219,10 +219,27 @@ class ShopifyHelper:
             shopify.Metafield({
                 'namespace': 'cross_sell',
                 'key': 'reco_data',
-                'value': json.dumps(reco_json_data, ensure_ascii=False),
+                'value': json.dumps(reco_items, ensure_ascii=False),
                 'type': 'json'
             })
         ]
+
+        # 3. Variables pour la communication (Nom produit et collection achetés)
+        if last_product_name:
+            new_metafields.append(shopify.Metafield({
+                'namespace': 'cross_sell',
+                'key': 'last_product',
+                'value': last_product_name,
+                'type': 'single_line_text_field'
+            }))
+        
+        if last_collection_name:
+            new_metafields.append(shopify.Metafield({
+                'namespace': 'cross_sell',
+                'key': 'last_collection',
+                'value': last_collection_name,
+                'type': 'single_line_text_field'
+            }))
 
         if collection_url:
             new_metafields.append(shopify.Metafield({
