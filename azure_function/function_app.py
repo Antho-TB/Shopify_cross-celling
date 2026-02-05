@@ -13,10 +13,10 @@ app = func.FunctionApp()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-@app.schedule(schedule="0 0 2 * * 1", arg_name="myTimer", run_on_startup=False, use_monitor=False) 
-def weekly_cross_sell_scanner_timer(myTimer: func.TimerRequest) -> None:
-    """Déclencheur temporel par défaut (Lundi 2h)."""
-    run_global_scan()
+# @app.schedule(schedule="0 0 2 * * 1", arg_name="myTimer", run_on_startup=False, use_monitor=False) 
+# def weekly_cross_sell_scanner_timer(myTimer: func.TimerRequest) -> None:
+#     """Désactivé : Le scan est maintenant piloté exclusivement par Shopify Flow."""
+#     run_global_scan()
 
 @app.route(route="run_global_scan", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
 def http_run_global_scan(req: func.HttpRequest) -> func.HttpResponse:
@@ -216,7 +216,10 @@ def http_trigger_test(req: func.HttpRequest) -> func.HttpResponse:
     pour tester le Shopify Flow de bout en bout.
     """
     logger.info('=== Déclenchement d\'un TEST de bout en bout ===')
-    email = "a.bezille@tb-groupe.fr" # Email cible par défaut
+    # On utilise l'email cible depuis l'environnement ou les paramètres, plus de défaut hardcodé
+    email = os.environ.get("TEST_CUSTOMER_EMAIL")
+    if not email:
+        return func.HttpResponse("Erreur: TEST_CUSTOMER_EMAIL non configuré dans Azure.", status_code=500)
     
     try:
         # Configuration
@@ -306,7 +309,11 @@ def http_validation_scan(req: func.HttpRequest) -> func.HttpResponse:
 
         helper = ShopifyHelper(store_url, access_token=access_token)
         
-        test_email = os.environ.get("TEST_CUSTOMER_EMAIL", "a.bezille@tb-groupe.fr")
+        # Plus de défaut hardcodé ici non plus pour éviter les envois massifs par erreur
+        test_email = os.environ.get("TEST_CUSTOMER_EMAIL")
+        if not test_email:
+             return func.HttpResponse("Erreur: TEST_CUSTOMER_EMAIL non configuré.", status_code=500)
+            
         test_customer = helper.get_customer_by_email(test_email)
         if not test_customer:
             return func.HttpResponse(json.dumps({"success": False, "error": f"Client test {test_email} non trouvé"}), status_code=404)
