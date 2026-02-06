@@ -216,10 +216,15 @@ def http_trigger_test(req: func.HttpRequest) -> func.HttpResponse:
     pour tester le Shopify Flow de bout en bout.
     """
     logger.info('=== Déclenchement d\'un TEST de bout en bout ===')
-    # On utilise l'email cible depuis l'environnement ou les paramètres, plus de défaut hardcodé
-    email = os.environ.get("TEST_CUSTOMER_EMAIL")
+    # On utilise uniquement l'email passé en paramètre. Plus de redirection automatique via variable d'env.
+    email = req.params.get("email")
     if not email:
-        return func.HttpResponse("Erreur: TEST_CUSTOMER_EMAIL non configuré dans Azure.", status_code=500)
+        try:
+            email = req.get_json().get("email")
+        except: pass
+        
+    if not email:
+        return func.HttpResponse("Erreur: Aucun email cible fourni pour le test (paramètre 'email' requis).", status_code=400)
     
     try:
         # Configuration
@@ -309,10 +314,16 @@ def http_validation_scan(req: func.HttpRequest) -> func.HttpResponse:
 
         helper = ShopifyHelper(store_url, access_token=access_token)
         
-        # Plus de défaut hardcodé ici non plus pour éviter les envois massifs par erreur
-        test_email = os.environ.get("TEST_CUSTOMER_EMAIL")
+        # Désactivation de la redirection automatique vers l'adresse de test Azure.
+        # L'email de test doit maintenant être passé explicitement pour éviter les envois non sollicités.
+        test_email = req.params.get("test_email")
         if not test_email:
-             return func.HttpResponse("Erreur: TEST_CUSTOMER_EMAIL non configuré.", status_code=500)
+            try:
+                test_email = req.get_json().get("test_email")
+            except: pass
+            
+        if not test_email:
+             return func.HttpResponse("Erreur: Aucun email de test fourni pour la redirection (paramètre 'test_email' requis).", status_code=400)
             
         test_customer = helper.get_customer_by_email(test_email)
         if not test_customer:
