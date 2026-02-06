@@ -107,11 +107,9 @@ Vous pouvez forcer une exécution pour un client spécifique via l'endpoint HTTP
 `Body: {"customer_id": "...", "collection_id": "..."}`
 
 ### Dashboard de Monitoring 📊
-Accédez au suivi en temps réel et aux rapports textuels ici :
-`https://func-shopify-crossselling-dev.azurewebsites.net/api/status`
-
-> [!TIP]
-> Ce tableau de bord est conçu pour être partagé avec les équipes non-techniques (Communication, Marketing) pour un suivi simple des performances.
+> [!IMPORTANT]
+> **Le tableau de bord est actuellement désactivé.**
+> Pour des raisons de sécurité et de simplification du système, l'endpoint de monitoring HTML n'est plus accessible. Le suivi s'effectue désormais via les logs Azure et les outils de rapport internes.
 
 ---
 
