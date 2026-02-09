@@ -101,39 +101,13 @@ cd azure_function
 func azure functionapp publish func-Shopify-CrossSelling-dev
 ```
 
-### Test Manuel
-Vous pouvez forcer une exécution pour un client spécifique via l'endpoint HTTP :
-`POST /api/check_recommendations`
-`Body: {"customer_id": "...", "collection_id": "..."}`
-
-### Dashboard de Monitoring 📊
-> [!IMPORTANT]
-> **Le tableau de bord est actuellement désactivé.**
-> Pour des raisons de sécurité et de simplification du système, l'endpoint de monitoring HTML n'est plus accessible. Le suivi s'effectue désormais via les logs Azure et les outils de rapport internes.
-
----
-
-## 🛠️ Retours d'expérience & Troubleshooting
-
-### 1. Conflits de Déclencheur (Trigger) Shopify Flow
-> [!WARNING]
-> Lorsque l'Azure Function ajoute un tag (ex: `trigger_reco`), cela déclenche l'événement **"Customer tags added"** dans Shopify.
-> Si d'autres flux (ex: Flux de Bienvenue) écoutent cet événement sans filtre précis, ils se déclencheront par erreur.
-> **Solution** : Toujours filtrer les flux Shopify par nom de tag spécifique dans les conditions.
-
-### 2. Redirections de Test (Azure Side)
-Afin d'éviter tout envoi d'emails intempestifs vers le développeur ou le client lors des phases de test :
-- Les redirections automatiques via variables d'environnement (`TEST_CUSTOMER_EMAIL`) ont été désactivées dans le code.
-- **Obligation** : Pour tout test manuel via l'API, l'email de destination doit être passé **explicitement** dans le corps de la requête JSON.
-
 ---
 
 ## ✅ Checklist Final
 - [x] Structure de fichiers standard V2 Azure.
 - [x] Logging détaillé pour le suivi des opérations.
-- [x] Tests de validation 6 mois OK.
+- [x] Logs de production accessibles via le portail Azure.
 - [x] Infrastructure Terraform déployée dans North Europe.
-- [x] Sécurisation des redirections de test Azure.
 
-**Dernière mise à jour :** 6 février 2026
-**Version :** 1.2.0
+**Dernière mise à jour :** 9 février 2026
+**Version :** 2.0.0
