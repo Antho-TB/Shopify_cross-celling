@@ -112,7 +112,23 @@ terraform apply -var-file="local.tfvars"
 
 ---
 
-## 🚀 Utilisation & Déploiement
+## � Alertes & Notifications
+
+Vous pouvez configurer une alerte automatique dans Shopify Flow pour être prévenu si le scan échoue :
+
+1.  **Alerte sur Échec Critique** :
+    - Dans votre flux "Programmation Cross-Selling", ajoutez une branche après le bloc **"Send HTTP Request"**.
+    - Utilisez l'option **"On error"** (si disponible dans votre version de Flow) ou vérifiez si le statut HTTP est différent de 200.
+    - Ajoutez l'action **"Send internal email"** pour recevoir un descriptif de l'erreur.
+
+2.  **Alerte sur Erreurs Partielles** :
+    - Le JSON de retour contient maintenant une clé `errors`.
+    - Vous pouvez ajouter une condition : `Si details.errors n'est pas vide`.
+    - Action : **"Send internal email"** avec le contenu de la liste des erreurs.
+
+---
+
+## �🚀 Utilisation & Déploiement
 
 ### Déploiement
 ```bash

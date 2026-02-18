@@ -23,9 +23,16 @@ def http_run_global_scan(req: func.HttpRequest) -> func.HttpResponse:
     """Permet à Shopify Flow de déclencher le scan manuellement ou sur programme."""
     try:
         results = run_global_scan()
+        # Si des erreurs critiques ont été détectées durant le scan, on peut aussi décider de renvoyer un 500
+        # Mais ici on préfère renvoyer 200 avec la liste des erreurs pour que Flow puisse faire un choix.
         return func.HttpResponse(json.dumps({"success": True, "details": results}), mimetype="application/json")
     except Exception as e:
-        return func.HttpResponse(json.dumps({"success": False, "error": str(e)}), status_code=500)
+        logger.error(f"CRITICAL FAILURE: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"success": False, "error": str(e)}), 
+            status_code=500, 
+            mimetype="application/json"
+        )
 
 def run_global_scan():
     """Cœur de la logique de scan (Mutualisé)."""
