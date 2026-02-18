@@ -11,22 +11,41 @@ Lorsqu'un client achète un produit d'une collection spécifique (ex: collection
 ## 🏗 Architecture Technique
 
 Le système repose sur trois piliers :
-1. **Shopify Flow** : Le chef d'orchestre qui gère les triggers (événements) et l'envoi final des emails via *Shopify Email*.
-2. **Azure Function (Python)** : Le "cerveau" qui calcule la différence entre les produits de la collection et les achats effectifs du client.
-3. **Shopify Metafields** : La "mémoire" du système qui stocke l'historique des recommandations pour éviter les répétitions.
+1. **Shopify Flow** : Le chef d'orchestre qui gère les triggers (événements), l'appel à l'Azure Function, et l'envoi final des emails via *Shopify Email*.
+2. **Azure Function (Python)** : Le "cerveau" optimisé qui traite l'intégralité des commandes en un seul passage pour garantir rapidité et conformité RGPD.
+3. **Shopify Metafields** : La "mémoire" du système qui stocke les recommandations personnalisées.
 
 ```mermaid
 graph TD
-    A[Shopify Flow: Relance 6 mois] --> B(Action: HTTP Request)
-    B --> C[Azure Function Python]
-    C --> D{API Shopify}
-    D --> E[Récupérer: Achats client + Précédentes Recommandations]
-    E --> F[Calcul: Collection - (Achats + Recommandés)]
-    F --> G[Sélection: Top 3 produits]
-    G --> H[Retourne JSON: Recap + Recommendations]
-    H --> I[Shopify Flow: Envoyer Email]
-    I --> J[Action: Update Metafield 'Recommandations Envoyées']
+    A[Shopify Flow: Programmation Hebdo] --> B(Action: HTTP Request)
+    B --> C[Azure Function: Scan Optimisé]
+    C --> D{Vérification RGPD}
+    D -- Non Consentis --> E[Comptage: Skipped RGPD]
+    D -- Consentis OK --> F[Calcul: Produits Manquants]
+    F --> G[Injection Metafields + Tag 'trigger_reco']
+    G --> H[Retour JSON: Reporting Détaillé]
+    H --> I[Shopify Flow: Envoi Email si Tag détecté]
 ```
+
+---
+
+## 🛡️ RGPD & Sécurité
+
+Le système intègre une vérification stricte du consentement marketing :
+- **Filtrage automatique** : Seuls les clients ayant `email_marketing_consent.state == 'subscribed'` (ou `accepts_marketing == true`) sont traités.
+- **Reporting** : Chaque scan retourne le nombre exact de clients ignorés pour cause de non-consentement (`skipped_rgpd`).
+- **Zéro Email Non Sollicité** : Aucun tag n'est ajouté et aucune donnée n'est envoyée si le consentement n'est pas vérifié.
+
+---
+
+## ⚡ Optimisation des Performances
+
+Le moteur a été refondu pour éviter les timeouts (limite de 60s de Shopify) :
+- **Scan Unique** : Au lieu de plusieurs recherches par collection, le système récupère toutes les commandes de la fenêtre en une seule fois.
+- **Reporting JSON** : La fonction renvoie un bilan complet à Shopify Flow :
+  - `total_found` : Nombre total de commandes identifiées dans la fenêtre.
+  - `updated` : Nombre de clients mis à jour avec succès (et emails envoyés).
+  - `skipped_rgpd` : Nombre de clients éligibles mais non-abonnés.
 
 ---
 
@@ -56,11 +75,11 @@ graph TD
 
 ## ⏰ LOGIQUE DE RELANCE (6 mois ±7 jours)
 
-Le système recherche les clients ayant acheté **exactement 6 mois avant** (avec une tolérance de ±7 jours) :
+Le système recherche les clients ayant acheté **exactement 6 mois avant** :
 
 - **Fenêtre** : 173 à 180 jours.
-- **Timing** : Chaque lundi à 2h du matin (`0 0 2 * * 1`).
-- **Mode** : Automatique via Timer Trigger.
+- **Pilotage** : Déclenché par le flux **"Programmation Cross-Selling"** dans Shopify Flow.
+- **Contenu** : Cible les collections *Louis, Forgés, Brigade, Forgé Premium Evercut*.
 
 ### Exemple de flux
 Si un client achète le **22 janvier 2025** :
@@ -105,9 +124,10 @@ func azure functionapp publish func-Shopify-CrossSelling-dev
 
 ## ✅ Checklist Final
 - [x] Structure de fichiers standard V2 Azure.
-- [x] Logging détaillé pour le suivi des opérations.
-- [x] Logs de production accessibles via le portail Azure.
+- [x] Logging de diagnostic détaillé pour les recommandations.
+- [x] Reporting RGPD intégré et visible dans Shopify Flow.
+- [x] Optimisation contre les timeouts (Scan unique).
 - [x] Infrastructure Terraform déployée dans North Europe.
 
-**Dernière mise à jour :** 9 février 2026
-**Version :** 2.0.0
+**Dernière mise à jour :** 18 février 2026
+**Version :** 2.5.0
