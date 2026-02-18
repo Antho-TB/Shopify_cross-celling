@@ -2,3 +2,4 @@ ShopifyAPI>=12.5.0
 azure-functions
 python-dotenv
 requests
+azure-storage-blob

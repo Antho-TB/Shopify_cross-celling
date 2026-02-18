@@ -3,17 +3,33 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 .env
 token.txt
+keys.txt
+*.log
+
+# Azure Functions
+local.settings.json
+.python_packages/
+.funcignore
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!variables.auto.tfvars
+!*.auto.tfvars
 
 # IDEs
-
 .idea/
+.vscode/
 Thumbs.db
 
 # OS
 .DS_Store
 
-# Brain/Artifacts (Optional - usually kept in user's appdata, but if copied here exclude them)
+# Brain/Artifacts
 .gemini/
 brain/
