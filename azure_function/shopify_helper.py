@@ -2,6 +2,7 @@ import shopify
 import os
 import requests
 import logging
+import json
 from datetime import datetime, timedelta
 
 # Configuration du logging
@@ -150,6 +151,7 @@ class ShopifyHelper:
         
         logger.info(f"Traitement de {len(all_orders)} commandes au total")
         
+        skipped_rgpd = 0
         for o in all_orders:
             if not o.customer or o.customer.id in seen_customers:
                 continue
@@ -169,6 +171,7 @@ class ShopifyHelper:
 
             if not is_subscribed:
                 logger.debug(f"Client {o.customer.email} sauté (Non abonné au marketing)")
+                skipped_rgpd += 1
                 continue
             # ----------------------------------------
 
@@ -187,8 +190,8 @@ class ShopifyHelper:
                 "purchased_product": triggering_product_name
             })
         
-        logger.info(f"Trouvé: {len(eligible_entries)} clients uniques éligibles")
-        return eligible_entries
+        logger.info(f"Trouvé: {len(eligible_entries)} clients uniques éligibles ({skipped_rgpd} ignorés RGPD)")
+        return eligible_entries, skipped_rgpd
 
     def update_customer_recommendations(self, customer_id, product_ids, manual_names=None, manual_data=None, collection_url=None, last_product_name=None, last_collection_name=None):
         """Met à jour les metafields (JSON + Texte + Link) et ajoute le tag de déclenchement."""

@@ -1,7 +1,7 @@
 import azure.functions as func
 import logging
-import json
 import os
+import json
 import io
 from datetime import datetime
 from shopify_helper import ShopifyHelper
@@ -35,7 +35,9 @@ def run_global_scan():
         "timestamp": datetime.now().isoformat(),
         "type": "SCAN",
         "status": "in_progress",
+        "total_found": 0,
         "total_updated": 0,
+        "skipped_rgpd": 0,
         "errors": [],
         "raw_logs": ""
     }
@@ -49,7 +51,7 @@ def run_global_scan():
         store_url = os.environ.get("SHOPIFY_STORE_URL")
         access_token = os.environ.get("SHOPIFY_ACCESS_TOKEN")
         
-        # Fenêtre de 6 mois (173-180 jours)
+        # Fenêtre de 6 mois (173-180 jours) - Rétablie
         delay_start = int(os.environ.get("ORDER_DELAY_DAYS_START", 173))
         delay_end = int(os.environ.get("ORDER_DELAY_DAYS_END", 180))
 
@@ -64,7 +66,10 @@ def run_global_scan():
             "303575662744": "Forgé Premium Evercut"
         }
 
+        total_customers_found = 0
         total_customers_updated = 0
+        total_skipped_rgpd = 0
+        detailed_errors = []
         
         # 2. Itération sur chaque collection cible
         for coll_id, coll_name in collections.items():
@@ -75,7 +80,11 @@ def run_global_scan():
             if not coll_products: continue
             
             # Recherche des clients ayant acheté dans cette collection il y a ~6 mois
-            eligible = helper.get_eligible_customers(days_start=delay_start, days_end=delay_end, collection_id=coll_id)
+            eligible, skipped = helper.get_eligible_customers(days_start=delay_start, days_end=delay_end, collection_id=coll_id)
+            
+            total_customers_found += len(eligible) + skipped
+            total_skipped_rgpd += skipped
+            
             coll_updated_count = 0
 
             # 3. Traitement de chaque client éligible trouvé
@@ -92,6 +101,7 @@ def run_global_scan():
                     if recos:
                         reco_data = [coll_products[pid] for pid in recos]
                         reco_names = [d["title"] for d in reco_data]
+                        logger.info(f"  -> {len(recos)} recos trouvées pour {customer.email}: {', '.join(reco_names)}")
                         coll_url = helper.get_collection_url(coll_id)
                         
                         # 4. Mise à jour Shopify : Injection des Metafields et du Tag déclencheur
@@ -105,21 +115,35 @@ def run_global_scan():
                             last_collection_name=coll_name
                         ):
                             coll_updated_count += 1
+                        else:
+                            detailed_errors.append(f"Échec sauvegarde pour {customer.email}")
+                    else:
+                        logger.info(f"  -> 0 reco pour {customer.email}")
                 except Exception as e:
-                    logger.error(f"Erreur client {customer.id}: {str(e)}")
+                    err_msg = f"Erreur client {getattr(customer, 'email', customer.id)}: {str(e)}"
+                    logger.error(err_msg)
+                    detailed_errors.append(err_msg)
             
             total_customers_updated += coll_updated_count
             logger.info(f"Collection {coll_name}: {coll_updated_count} clients mis à jour")
         
         report["status"] = "success"
+        report["total_found"] = total_customers_found
         report["total_updated"] = total_customers_updated
+        report["skipped_rgpd"] = total_skipped_rgpd
+        report["errors"] = detailed_errors
         
         log_handler.flush()
         report["raw_logs"] = log_stream.getvalue()
         logger.removeHandler(log_handler)
         report_manager.save_report(report)
         
-        return {"updated": total_customers_updated}
+        return {
+            "total_found": total_customers_found,
+            "updated": total_customers_updated,
+            "skipped_rgpd": total_skipped_rgpd,
+            "errors": detailed_errors[:5] # On envoie les 5 premières erreurs max à Shopify
+        }
 
     except Exception as e:
         logger.error(f"Erreur fatale: {str(e)}")
